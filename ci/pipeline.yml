@@ -5,12 +5,12 @@ resources:
     uri: git@github.com:jalgraves/concourse_test.git
     branch: master
     private_key: ((github_private_key))
+    paths: [Dockerfile]
 
-- name: docker-remote-tunnel-image
+- name: concourse-docker-image
   type: docker-image
   source:
     repository: jalgraves/testing_image
-    tag: test
     username: ((dockerhub_user))
     password: ((dockerhub_password))
 
@@ -37,7 +37,7 @@ jobs:
       image_resource:
         type: docker-image
         source:
-          repository: rbekker87/build-tools
+          repository: jalgraves/testing_image
 
       outputs:
       - name: workspace
@@ -50,17 +50,6 @@ jobs:
         - -c
         - |
           output_dir=workspace
-
-          cat << EOF > "${output_dir}/Dockerfile"
-          FROM alpine
-
-          ADD git-repo /tmp/git-repo
-          RUN mv /tmp/git-repo/docker-tunnel /usr/bin/docker-tunnel
-          RUN apk --no-cache add screen docker openssl openssh-client apache2-utils
-          RUN /usr/bin/docker-tunnel -h
-          RUN rm -rf /tmp/git-repo
-          EOF
-
           cp -R ./git-repo "${output_dir}/git-repo"
 
   - put: docker-remote-tunnel-image
@@ -70,7 +59,7 @@ jobs:
     on_failure:
       put: slack-alert
       params:
-        channel: '#system_events'
+        channel: '#builds'
         username: 'concourse'
         icon_emoji: ':concourse:'
         silent: true
@@ -80,7 +69,7 @@ jobs:
     on_success:
       put: slack-alert
       params:
-        channel: '#system_events'
+        channel: '#builds'
         username: 'concourse'
         icon_emoji: ':concourse:'
         silent: true
@@ -121,7 +110,7 @@ jobs:
     on_success:
       put: slack-alert
       params:
-        channel: '#system_events'
+        channel: '#builds'
         username: 'concourse'
         icon_emoji: ':concourse:'
         silent: true
