@@ -1,5 +1,5 @@
 resources:
-- name: git-repo
+- name: concourse-dockerfile
   type: git
   source:
     uri: git@github.com:jalgraves/concourse_test.git
@@ -7,113 +7,17 @@ resources:
     private_key: ((github_private_key))
     paths: [Dockerfile]
 
-- name: concourse-docker-image
+- name: concourse-build-image
   type: docker-image
   source:
     repository: jalgraves/testing_image
     username: ((dockerhub_user))
     password: ((dockerhub_password))
 
-- name: slack-alert
-  type: slack-notification
-  source:
-    url: ((slack_notification_url))
-
-resource_types:
-  - name: slack-notification
-    type: docker-image
-    source:
-      repository: cfcommunity/slack-notification-resource
-      tag: v1.3.0
-
 jobs:
-- name: build-cached-image
+- name: concourse-build-job
   plan:
-  - get: git-repo
+  - get: concourse-dockerfile
     trigger: true
-  - task: build-cached-image-workspace
-    config:
-      platform: linux
-      image_resource:
-        type: docker-image
-        source:
-          repository: jalgraves/testing_image
-
-      outputs:
-      - name: workspace
-      inputs:
-      - name: git-repo
-
-      run:
-        path: /bin/sh
-        args:
-        - -c
-        - |
-          output_dir=workspace
-          cp -R ./git-repo "${output_dir}/git-repo"
-
-  - put: docker-remote-tunnel-image
-    params:
-      build: workspace
-
-    on_failure:
-      put: slack-alert
-      params:
-        channel: '#builds'
-        username: 'concourse'
-        icon_emoji: ':concourse:'
-        silent: true
-        text: |
-            *$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME* ($BUILD_NAME) FAILED to build image
-            https://ci.domain.com/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME
-    on_success:
-      put: slack-alert
-      params:
-        channel: '#builds'
-        username: 'concourse'
-        icon_emoji: ':concourse:'
-        silent: true
-        text: |
-            *$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME* ($BUILD_NAME) SUCCESS - Image has been published
-            https://ci.domain.com/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME
-
-- name: test
-  plan:
-  - get: docker-remote-tunnel-image
-    passed: [build-cached-image]
-    trigger: true
-  - get: git-repo
-    passed: [build-cached-image]
-  - task: run-tests
-    image: docker-remote-tunnel-image
-    config:
-      platform: linux
-      inputs:
-      - name: git-repo
-      run:
-        dir: git-repo
-        path: sh
-        args:
-        - /usr/bin/docker-tunnel
-        - --help
-
-    on_failure:
-      put: slack-alert
-      params:
-        channel: '#system_events'
-        username: 'concourse'
-        icon_emoji: ':concourse:'
-        silent: true
-        text: |
-            *$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME* ($BUILD_NAME) FAILED - Testing image failure
-            https://ci.domain.com/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME
-    on_success:
-      put: slack-alert
-      params:
-        channel: '#builds'
-        username: 'concourse'
-        icon_emoji: ':concourse:'
-        silent: true
-        text: |
-            *$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME* ($BUILD_NAME) SUCCESS - Testing image Succeeded
-            https://ci.domain.com/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME
+  - put: concourse-build-image
+    params: {build: concourse-dockerfile}
